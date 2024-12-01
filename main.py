@@ -74,7 +74,7 @@ def send_telemetry():
                 "datasource": MACHINE_IP,
                 "machineid": MACHINE_ID,
                 "totaloutputunitcount": boxes,
-                "machineSpeed": speed,
+                "machinespeed": speed,
                 "totalworkingenergy": mwatts
             }
         }
