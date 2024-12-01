@@ -48,7 +48,7 @@ function ChartComponent({ data, title }) {
           <Legend />
           <Line
             type="monotone"
-            dataKey="value"
+            dataKey={title}
             stroke="#8884d8"
             activeDot={{ r: 8 }}
           />

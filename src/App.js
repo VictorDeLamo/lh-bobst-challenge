@@ -56,14 +56,14 @@ function App() {
     <div className="App">
       <Sidebar />
       <div className="content">
-        <h1>Bienvenido a mi aplicación React</h1>
+        <h1>Packaging monitoring BOBST</h1>
         <div className="chart-grid">
           <ChartComponent data={dataEnergy} title="Energy consumption" />
-          <ChartComponent data={dataEnergyPrize} title="Waste" />
-          <ChartComponent data={dataAvgspeed} title="Live Data Chart 4" />
-          <ChartComponent data={dataBoxes} title="Live Data Chart 5" />
-          <ChartComponent data={dataInstspeed} title="Live Data Chart 6" />
-          <ChartComponent data={dataDistcenter} title="Live Data Chart 6" />
+          <ChartComponent data={dataEnergyPrize} title="Energy cost" />
+          <ChartComponent data={dataAvgspeed} title="Average speed" />
+          <ChartComponent data={dataBoxes} title="Number of boxes" />
+          <ChartComponent data={dataInstspeed} title="Instant speed" />
+          <ChartComponent data={dataDistcenter} title="Lateral distance" />
         </div>
       </div>
     </div>
