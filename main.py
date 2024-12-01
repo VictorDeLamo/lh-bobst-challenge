@@ -263,13 +263,15 @@ def slow_servo():
 @app.route("/arm_enable", methods=["POST"])
 def enable_arm():
     global arm_enabled
-    arm_enabled = True
+    if arm_enabled == False:
+        arm_enabled = True
     return jsonify({"status": "Arm enabled"}), 200
 
 @app.route("/arm_disable", methods=["POST"])
 def disable_arm():
     global arm_enabled
-    arm_enabled = False
+    if arm_enabled == True:
+        arm_enabled = False
     return jsonify({"status": "Arm disabled"}), 200
 
 def main(): 
@@ -279,7 +281,6 @@ def main():
             servo_motor()
             update_boxes_arm()
             update_stats()
-            #send_telemetry()
 
     except KeyboardInterrupt:
         print("\nStopping the servo.")
