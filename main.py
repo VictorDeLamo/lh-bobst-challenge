@@ -3,7 +3,7 @@ from ina219 import INA219, DeviceRangeError
 from azure.iot.device import IoTHubDeviceClient, Message
 import time, datetime, json
 from flask import Flask, jsonify, request
-import threading
+import threading, os
 
 # VARS
 iboxes = 0
@@ -29,6 +29,7 @@ SHUNT_OMHS = 0.1
 CONNECTION_STRING = 'HostName=ra-develop-bobstconnect-01.azure-devices.net;DeviceId=LAUZHACKPI3;SharedAccessKey=wALbROiWbQnS3jd7/PtmQXEBAUqKu0iStAIoTMC95ps='
 MACHINE_ID = 'lauzhack-pi3'
 MACHINE_IP = '10.0.4.4:80'
+BOXES_FILE = "boxes_data.json"
 FW_TO_RV = {
     12: 2,
     11: 3,
@@ -105,7 +106,7 @@ def update_stats():
         start_time = current_time
 
         tel_cont += 1
-        if tel_cont == 3:
+        if tel_cont == 5:
             send_telemetry()
             tel_cont = 0
         
@@ -300,7 +301,31 @@ def get_data():
     }
     return jsonify(data)
 
+def load_boxes():
+    global boxes
+    if os.path.exists(BOXES_FILE):
+        try:
+            with open(BOXES_FILE, "r") as f:
+                data = json.load(f)
+                boxes = data.get("boxes", 0)
+                print(f"Boxes loaded: {boxes}")
+        except Exception as e:
+            print(f"Error loading boxes: {e}")
+            boxes = 0
+    else:
+        boxes = 0
+
+def save_boxes():
+    global boxes
+    try:
+        with open(BOXES_FILE, "w") as f:
+            json.dump({"boxes": boxes}, f)
+        print(f"Boxes saved: {boxes}")
+    except Exception as e:
+        print(f"Error saving boxes: {e}")
+
 def main(): 
+    load_boxes()
     try:
         print("Servo is running continuously. Press Ctrl+C to stop.")
         while True:
@@ -310,6 +335,7 @@ def main():
 
     except KeyboardInterrupt:
         print("\nStopping the servo.")
+        save_boxes()
         pwm.ChangeDutyCycle(0)
         time.sleep(1)
 
