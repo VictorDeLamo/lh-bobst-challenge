@@ -15,7 +15,7 @@ dutyCycle = 12
 start_time = time.time()
 total_seconds = 0
 watts = 0.0
-servo_direction = "forward" 
+servo_direction = "forward"
 read_boxes = True
 distancia = 0.0
 tel_cont = 0
@@ -49,7 +49,7 @@ RV_TO_FW = {
 motorPin = (18,23,24,25)
 rolePerMinute = 17
 stepsPerRevolution = 2048
-steps_per_degree = stepsPerRevolution / 360 
+steps_per_degree = stepsPerRevolution / 360
 stepSpeed = (60/rolePerMinute)/stepsPerRevolution
 hand_position = 'center'
 degrees_moved = 25
@@ -88,6 +88,9 @@ pwm.start(0)
 
 client = IoTHubDeviceClient.create_from_connection_string(CONNECTION_STRING)
 
+# Create a lock for thread synchronization
+lock = threading.Lock()
+
 def servo_motor():
     global pwm
     pwm.ChangeDutyCycle(dutyCycle)
@@ -96,62 +99,65 @@ def servo_motor():
 def update_stats():
     global start_time, speed, total_seconds, watts, boxes, ispeed, iboxes, tel_cont
     current_time = time.time()
-    
-    if current_time - start_time >= 1:
-        total_seconds +=1
-        watts += ina.power() / 1000 
-        ispeed = iboxes
-        iboxes = 0
-        speed = boxes/total_seconds
-        start_time = current_time
 
-        tel_cont += 1
-        if tel_cont == 5:
-            send_telemetry()
-            tel_cont = 0
-        
+    if current_time - start_time >= 1:
+        with lock:
+            total_seconds +=1
+            watts += ina.power() / 1000
+            ispeed = iboxes
+            iboxes = 0
+            speed = boxes/total_seconds
+            start_time = current_time
+
+            tel_cont += 1
+            if tel_cont == 5:
+                send_telemetry()
+                tel_cont = 0
+
 def update_boxes_arm():
     global sensor_bool, boxes, read_boxes, arm_enabled, iboxes, distancia
     sensor_bool = GPIO.input(LINEAL_PIN)
     if sensor_bool == 0 and read_boxes == 1:
-        boxes += 1
-        iboxes += 1
-        read_boxes = 0
-        distancia = measure_distance()
-        if arm_enabled:
-            if distancia <= 5.6:
-                rotary('right')
-            elif distancia > 6.5:
-                rotary('left')
-            else:           
-                rotary('center') 
+        with lock:
+            boxes += 1
+            iboxes += 1
+            read_boxes = 0
+            distancia = measure_distance()
+            if arm_enabled:
+                if distancia <= 5.6:
+                    rotary('right')
+                elif distancia > 6.5:
+                    rotary('left')
+                else:
+                    rotary('center')
     elif sensor_bool == 1 and read_boxes == 0:
-         read_boxes = 1
+        with lock:
+            read_boxes = 1
 
 def send_telemetry():
-        global boxes, speed, watts
-        telemetry_data = {
-            "telemetry": {
-                "timestamp": datetime.datetime.utcnow().isoformat() + "Z",
-                "datasource": MACHINE_IP,
-                "machineid": MACHINE_ID,
-                "totaloutputunitcount": boxes,
-                "machinespeed": speed,
-                "totalworkingenergy": watts
-            }
+    global boxes, speed, watts
+    telemetry_data = {
+        "telemetry": {
+            "timestamp": datetime.datetime.utcnow().isoformat() + "Z",
+            "datasource": MACHINE_IP,
+            "machineid": MACHINE_ID,
+            "totaloutputunitcount": boxes,
+            "machinespeed": speed,
+            "totalworkingenergy": watts
         }
-        telemetry_json = json.dumps(telemetry_data)
-        message = Message(telemetry_json)
-        message.content_type = "application/json"
-        message.content_encoding = "utf-8"
-        message.custom_properties["messageType"] = "Telemetry"
+    }
+    telemetry_json = json.dumps(telemetry_data)
+    message = Message(telemetry_json)
+    message.content_type = "application/json"
+    message.content_encoding = "utf-8"
+    message.custom_properties["messageType"] = "Telemetry"
 
-        try:
-            client.send_message(message)
-            #print(f"Telemetry sent: {telemetry_json}")
-            print(f"Telemetry sent.")
-        except Exception as e:
-            print(f"Failed to send telemetry: {e}")
+    try:
+        client.send_message(message)
+        #print(f"Telemetry sent: {telemetry_json}")
+        print(f"Telemetry sent.")
+    except Exception as e:
+        print(f"Failed to send telemetry: {e}")
 
 # ARM and STEPPER
 def move_left(degrees):
@@ -218,87 +224,96 @@ def measure_distance():
     distance = lapse * 34300 / 2  # Sound speed: 343 m/s
     return distance
 
-# API   
+# API
 app = Flask(__name__)
 
 @app.route("/start", methods=["POST"])
 def start_servo():
     global dutyCycle
-    dutyCycle = 12
+    with lock:
+        dutyCycle = 12
     return jsonify({"status": "Servo motor started"}), 200
 
 @app.route("/stop", methods=["POST"])
 def stop_servo():
     global dutyCycle
-    dutyCycle = 0
+    with lock:
+        dutyCycle = 0
     return jsonify({"status": "Servo motor stopped"}), 200
 
 @app.route("/forward", methods=["POST"])
 def set_forward():
     global dutyCycle, servo_direction
-    if servo_direction == "reverse" and dutyCycle != 0:
-        dutyCycle = RV_TO_FW.get(dutyCycle, None)
-        servo_direction = "forward"
-      
+    with lock:
+        if servo_direction == "reverse" and dutyCycle != 0:
+            dutyCycle = RV_TO_FW.get(dutyCycle, None)
+            servo_direction = "forward"
+
     return jsonify({"status": "Direction set to forward", "speed": dutyCycle}), 200
 
 @app.route("/reverse", methods=["POST"])
 def set_reverse():
     global dutyCycle, servo_direction
-    if servo_direction == "forward" and dutyCycle != 0:
-        dutyCycle = FW_TO_RV.get(dutyCycle, None)
-        servo_direction = "reverse"
+    with lock:
+        if servo_direction == "forward" and dutyCycle != 0:
+            dutyCycle = FW_TO_RV.get(dutyCycle, None)
+            servo_direction = "reverse"
     return jsonify({"status": "Direction set to reverse", "speed": dutyCycle}), 200
 
 @app.route("/fast", methods=["POST"])
 def fast_servo():
     global dutyCycle, servo_direction
-    if servo_direction == "forward" and dutyCycle < 12:
-        dutyCycle += 1 
-    elif servo_direction == "reverse" and dutyCycle > 2:
-        dutyCycle -= 1
-    else:
-        return jsonify({"error": "Cannot increase speed beyond maximum"}), 400
+    with lock:
+        if servo_direction == "forward" and dutyCycle < 12:
+            dutyCycle += 1
+        elif servo_direction == "reverse" and dutyCycle > 2:
+            dutyCycle -= 1
+        else:
+            return jsonify({"error": "Cannot increase speed beyond maximum"}), 400
 
     return jsonify({"status": "Speed increased", "speed": dutyCycle}), 200
 
 @app.route("/slow", methods=["POST"])
 def slow_servo():
     global dutyCycle, servo_direction
-    if servo_direction == "forward" and dutyCycle > 8:
-        dutyCycle -= 1 
-    elif servo_direction == "reverse" and dutyCycle < 7:
-        dutyCycle += 1
-    else:
-        return jsonify({"error": "Cannot decrease speed beyond minimum"}), 400
+    with lock:
+        if servo_direction == "forward" and dutyCycle > 8:
+            dutyCycle -= 1
+        elif servo_direction == "reverse" and dutyCycle < 7:
+            dutyCycle += 1
+        else:
+            return jsonify({"error": "Cannot decrease speed beyond minimum"}), 400
 
     return jsonify({"status": "Speed decreased", "speed": dutyCycle}), 200
 
 @app.route("/arm_enable", methods=["POST"])
 def enable_arm():
     global arm_enabled
-    if arm_enabled == False:
-        arm_enabled = True
+    with lock:
+        if arm_enabled == False:
+            arm_enabled = True
     return jsonify({"status": "Arm enabled"}), 200
 
 @app.route("/arm_disable", methods=["POST"])
 def disable_arm():
     global arm_enabled
-    if arm_enabled == True:
-        arm_enabled = False
+    with lock:
+        if arm_enabled == True:
+            arm_enabled = False
     return jsonify({"status": "Arm disabled"}), 200
 
 @app.route("/data", methods=["GET"])
-def get_data(): 
+def get_data():
     global watts, boxes, speed, ispeed, distancia, total_seconds
-    data = {
-        "energy": watts * total_seconds / 3600,
-        "boxes": boxes,
-        "energyprize": watts * total_seconds / 3600 * 0.0122,
-        "avgspeed": speed,
-        "instspeed": ispeed,
-        "latdist": distancia
-    }
+    with lock:
+        data = {
+            "energy": watts * total_seconds / 3600,
+            "boxes": boxes,
+            "energyprize": watts * total_seconds / 3600 * 0.0122,
+            "avgspeed": speed,
+            "instspeed": ispeed,
+            "latdist": distancia
+        }
     return jsonify(data)
 
 def load_boxes():
@@ -318,13 +333,14 @@ def load_boxes():
 def save_boxes():
     global boxes
     try:
-        with open(BOXES_FILE, "w") as f:
-            json.dump({"boxes": boxes}, f)
-        print(f"Boxes saved: {boxes}")
+        with lock:
+            with open(BOXES_FILE, "w") as f:
+                json.dump({"boxes": boxes}, f)
+            print(f"Boxes saved: {boxes}")
     except Exception as e:
         print(f"Error saving boxes: {e}")
 
-def main(): 
+def main():
     load_boxes()
     try:
         print("Servo is running continuously. Press Ctrl+C to stop.")
