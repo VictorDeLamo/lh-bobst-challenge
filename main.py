@@ -40,17 +40,40 @@ RV_TO_FW = {
     7: 8,
 }
 
+# STEPPER MOTOR
+motorPin = (18,23,24,25)
+rolePerMinute = 17
+stepsPerRevolution = 2048
+steps_per_degree = stepsPerRevolution / 360 
+stepSpeed = (60/rolePerMinute)/stepsPerRevolution
+hand_position = 'center'
+degrees_moved = 25
+sequence = [
+    [1, 0, 0, 0],
+    [1, 1, 0, 0],
+    [0, 1, 0, 0],
+    [0, 1, 1, 0],
+    [0, 0, 1, 0],
+    [0, 0, 1, 1],
+    [0, 0, 0, 1],
+    [1, 0, 0, 1],
+]
+arm_enabled = False
+
 # SETUP
 GPIO.setmode(GPIO.BCM)
 GPIO.setup(SERVO_PIN, GPIO.OUT)
 GPIO.setup(TRIG_PIN, GPIO.OUT)
 GPIO.setup(ECHO_PIN, GPIO.IN)
 GPIO.setup(LINEAL_PIN, GPIO.IN)
+GPIO.setmode(GPIO.BCM)
+for i in motorPin:
+    GPIO.setup(i, GPIO.OUT)
 
 ina = INA219(shunt_ohms=SHUNT_OMHS, busnum=1)
 ina.configure(
-    voltage_range=ina.RANGE_16V,
-    gain=ina.GAIN_AUTO,
+    voltage_range=ina.RANGE_32V,
+    gain=ina.GAIN_8_320MV,
     bus_adc=ina.ADC_128SAMP,
     shunt_adc=ina.ADC_128SAMP
 )
@@ -75,13 +98,20 @@ def update_stats():
         start_time = current_time
         send_telemetry()
         
-
-def update_boxes():
-    global sensor_bool, boxes, read_boxes
+def update_boxes_arm():
+    global sensor_bool, boxes, read_boxes, arm_enabled
     sensor_bool = GPIO.input(LINEAL_PIN)
     if sensor_bool == 0 and read_boxes == 1:
         boxes += 1
         read_boxes = 0
+        distancia = measure_distance()
+        if arm_enabled:
+            if distancia <= 5.6:
+                rotary('right')
+            elif distancia > 6.5:
+                rotary('left')
+            else:           
+                rotary('center') 
     elif sensor_bool == 1 and read_boxes == 0:
          read_boxes = 1
 
@@ -108,6 +138,71 @@ def send_telemetry():
             print(f"Telemetry sent: {telemetry_json}")
         except Exception as e:
             print(f"Failed to send telemetry: {e}")
+
+# ARM and STEPPER
+def move_left(degrees):
+    #time.sleep(3)
+    steps = int(steps_per_degree * degrees)
+    for _ in range(steps):
+        for step in sequence:
+            for pin in range(4):
+                GPIO.output(motorPin[pin], step[pin])
+            time.sleep(stepSpeed)
+
+def move_right(degrees):
+    #time.sleep(3)
+    steps = int(steps_per_degree * degrees)
+    for _ in range(steps):
+        for step in reversed(sequence):
+            for pin in range(4):
+                GPIO.output(motorPin[pin], step[pin])
+            time.sleep(stepSpeed)
+
+def rotary(direction):
+    global hand_position
+    if direction == 'center' and hand_position == 'right':
+        print("Arm going Center")
+        move_left(degrees_moved)
+        hand_position = 'center'
+    elif direction == 'center' and hand_position == 'left':
+        print("Arm going Center")
+        move_right(degrees_moved)
+        hand_position = 'center'
+    elif direction == 'right' and hand_position == 'center':
+        print("Arm going right")
+        move_right(degrees_moved)
+        hand_position = 'right'
+    elif direction == 'right' and hand_position == 'left':
+        print("Arm going right!!!")
+        move_right(2*degrees_moved)
+        hand_position = 'right'
+    elif direction == 'left' and hand_position == 'center':
+        print("Arm going left")
+        move_left(degrees_moved)
+        hand_position = 'left'
+    elif direction == 'left' and hand_position == 'right':
+        print("Arm going left!!!")
+        move_left(2*degrees_moved)
+        hand_position = 'left'
+
+def measure_distance():
+    # 10Âµs pulse
+    GPIO.output(TRIG_PIN, True)
+    time.sleep(0.00001)
+    GPIO.output(TRIG_PIN, False)
+
+    # Wait for ECHO pulse
+    while GPIO.input(ECHO_PIN) == 0:
+        pulse_start = time.time()
+
+    while GPIO.input(ECHO_PIN) == 1:
+        pulse_end = time.time()
+
+    # Calculate pulse duration
+    lapse = pulse_end - pulse_start
+    # Calculate distance in cm
+    distance = lapse * 34300 / 2  # Sound speed: 343 m/s
+    return distance
 
 # API   
 app = Flask(__name__)
@@ -165,12 +260,24 @@ def slow_servo():
 
     return jsonify({"status": "Speed decreased", "speed": dutyCycle}), 200
 
+@app.route("/arm_enable", methods=["POST"])
+def enable_arm():
+    global arm_enabled
+    arm_enabled = True
+    return jsonify({"status": "Arm enabled"}), 200
+
+@app.route("/arm_disable", methods=["POST"])
+def disable_arm():
+    global arm_enabled
+    arm_enabled = False
+    return jsonify({"status": "Arm disabled"}), 200
+
 def main(): 
     try:
         print("Servo is running continuously. Press Ctrl+C to stop.")
         while True:
             servo_motor()
-            update_boxes()
+            update_boxes_arm()
             update_stats()
             #send_telemetry()
 
