@@ -18,6 +18,7 @@ watts = 0.0
 servo_direction = "forward" 
 read_boxes = True
 distancia = 0.0
+tel_cont = 0
 
 # CONST
 SERVO_PIN = 16
@@ -92,8 +93,9 @@ def servo_motor():
     time.sleep(0.001)
 
 def update_stats():
-    global start_time, speed, total_seconds, watts, boxes, ispeed, iboxes
+    global start_time, speed, total_seconds, watts, boxes, ispeed, iboxes, tel_cont
     current_time = time.time()
+    
     if current_time - start_time >= 1:
         total_seconds +=1
         watts += ina.power() / 1000 
@@ -101,7 +103,11 @@ def update_stats():
         iboxes = 0
         speed = boxes/total_seconds
         start_time = current_time
-        send_telemetry()
+
+        tel_cont += 1
+        if tel_cont == 3:
+            send_telemetry()
+            tel_cont = 0
         
 def update_boxes_arm():
     global sensor_bool, boxes, read_boxes, arm_enabled, iboxes, distancia
@@ -283,7 +289,7 @@ def disable_arm():
 
 @app.route("/data", methods=["GET"])
 def get_data(): 
-    global watts, boxes, energy
+    global watts, boxes, speed, ispeed, distancia, total_seconds
     data = {
         "energy": watts * total_seconds / 3600,
         "boxes": boxes,
