@@ -6,15 +6,18 @@ from flask import Flask, jsonify, request
 import threading
 
 # VARS
+iboxes = 0
 boxes = 0
 currentPower = 0
 speed = 0
+ispeed = 0
 dutyCycle = 12
 start_time = time.time()
 total_seconds = 0
-watts = 1.0
+watts = 0.0
 servo_direction = "forward" 
 read_boxes = True
+distancia = 0.0
 
 # CONST
 SERVO_PIN = 16
@@ -89,20 +92,23 @@ def servo_motor():
     time.sleep(0.001)
 
 def update_stats():
-    global start_time, speed, total_seconds, watts, boxes
+    global start_time, speed, total_seconds, watts, boxes, ispeed, iboxes
     current_time = time.time()
     if current_time - start_time >= 1:
         total_seconds +=1
         watts += ina.power() / 1000 
+        ispeed = iboxes
+        iboxes = 0
         speed = boxes/total_seconds
         start_time = current_time
         send_telemetry()
         
 def update_boxes_arm():
-    global sensor_bool, boxes, read_boxes, arm_enabled
+    global sensor_bool, boxes, read_boxes, arm_enabled, iboxes, distancia
     sensor_bool = GPIO.input(LINEAL_PIN)
     if sensor_bool == 0 and read_boxes == 1:
         boxes += 1
+        iboxes += 1
         read_boxes = 0
         distancia = measure_distance()
         if arm_enabled:
@@ -135,7 +141,8 @@ def send_telemetry():
 
         try:
             client.send_message(message)
-            print(f"Telemetry sent: {telemetry_json}")
+            #print(f"Telemetry sent: {telemetry_json}")
+            print(f"Telemetry sent.")
         except Exception as e:
             print(f"Failed to send telemetry: {e}")
 
@@ -273,6 +280,19 @@ def disable_arm():
     if arm_enabled == True:
         arm_enabled = False
     return jsonify({"status": "Arm disabled"}), 200
+
+@app.route("/data", methods=["GET"])
+def get_data(): 
+    global watts, boxes, energy
+    data = {
+        "energy": watts * total_seconds / 3600,
+        "boxes": boxes,
+        "energyprize": watts * total_seconds / 3600 * 0.0122,
+        "avgspeed": speed,
+        "instspeed": ispeed,
+        "latdist": distancia
+    }
+    return jsonify(data)
 
 def main(): 
     try:
