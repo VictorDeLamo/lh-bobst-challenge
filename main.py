@@ -63,7 +63,7 @@ sequence = [
     [0, 0, 0, 1],
     [1, 0, 0, 1],
 ]
-arm_enabled = False
+arm_enabled = True
 
 # SETUP
 GPIO.setmode(GPIO.BCM)
@@ -161,7 +161,7 @@ def send_telemetry():
 
 # ARM and STEPPER
 def move_left(degrees):
-    #time.sleep(3)
+    #time.sleep(1.2)
     steps = int(steps_per_degree * degrees)
     for _ in range(steps):
         for step in sequence:
@@ -170,7 +170,7 @@ def move_left(degrees):
             time.sleep(stepSpeed)
 
 def move_right(degrees):
-    #time.sleep(3)
+    #time.sleep(1.2)
     steps = int(steps_per_degree * degrees)
     for _ in range(steps):
         for step in reversed(sequence):
