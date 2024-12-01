@@ -1,0 +1,16 @@
+.App {
+  display: grid;
+  grid-template-columns: 20% 80%; /* Dos columnas: 20% para la barra lateral y 80% para el contenido principal */
+  /*height: 100vh; Altura completa de la ventana */
+}
+
+.content {
+  padding: 20px;
+  overflow-y: auto; /* Permite el desplazamiento si el contenido es demasiado grande */
+}
+
+.chart-grid {
+  display: grid;
+  grid-template-columns: 1fr 1fr; /* Dos columnas iguales */
+  gap: 20px; /* Espacio entre los elementos */
+}
